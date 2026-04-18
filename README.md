@@ -157,5 +157,4 @@ check_mongodb_connection → calculate_standings_spark → verify_mongodb_result
 
 ## Author
 
-Mostafa Tarek
 [LinkedIn]https://github.com/mostafa7274 • [GitHub]https://github.com/mostafa7274
