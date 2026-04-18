@@ -1,0 +1,156 @@
+Perfect! You have everything needed. Let me note what we have:
+
+| Image | Version | Use |
+|---|---|---|
+| `apache/airflow` | 2.9.1 | Orchestration |
+| `apache/spark` | 3.5.1 | Data processing |
+| `postgres` | 15 | We'll use this as Airflow's database instead of SQLite |
+
+The postgres image is actually great news — using PostgreSQL instead of SQLite makes your project more production-realistic and more impressive on your CV.
+
+---
+
+## Step 1 — Create the project folder structure
+
+Run these commands in CMD:
+
+```cmd
+mkdir "E:\Self Development\Apache Air Flow\football-league-pipeline"
+cd "E:\Self Development\Apache Air Flow\football-league-pipeline"
+mkdir dags
+mkdir spark_jobs
+mkdir data
+mkdir docker
+mkdir logs
+mkdir plugins
+```
+
+Then verify the structure:
+```cmd
+tree "E:\Self Development\Apache Air Flow\football-league-pipeline"
+```
+
+---
+
+## Step 2 — Stop your current Airflow container
+
+We need to stop the old container because we're going to set up a proper new one connected to PostgreSQL and Spark via Docker network:
+
+```cmd
+docker stop airflow
+```
+
+---
+
+## Step 3 — Create the Docker Compose file
+
+This is the most important file in the project. Create a file called `docker-compose.yml` inside your `docker/` folder with this content:
+
+```yaml
+version: '3.8'
+
+networks:
+  football_network:
+    driver: bridge
+
+services:
+
+  # PostgreSQL - Airflow metadata database
+  postgres:
+    image: postgres:15
+    container_name: football_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    networks:
+      - football_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+
+  # Airflow
+  airflow:
+    image: apache/airflow:2.9.1
+    container_name: football_airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - football_network
+    ports:
+      - "8081:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@football_postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__FERNET_KEY: "ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg="
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../logs:/opt/airflow/logs
+      - ../plugins:/opt/airflow/plugins
+      - ../data:/opt/airflow/data
+      - ../spark_jobs:/opt/airflow/spark_jobs
+    command: standalone
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+
+  # Spark
+  spark:
+    image: apache/spark:3.5.1
+    container_name: football_spark
+    networks:
+      - football_network
+    volumes:
+      - ../data:/opt/spark/data
+      - ../spark_jobs:/opt/spark/spark_jobs
+    command: tail -f /dev/null
+    environment:
+      - SPARK_MODE=master
+
+volumes:
+  postgres_data:
+```
+
+---
+
+## What every section in this file means
+
+**`networks`** — creates a private network called `football_network`. All three containers join this network so they can talk to each other by name. For example Airflow can reach Spark just by saying `football_spark` instead of an IP address.
+
+**`postgres` service** — runs PostgreSQL as Airflow's metadata database. Much better than SQLite for a CV project. The `healthcheck` makes sure Airflow doesn't start until PostgreSQL is fully ready.
+
+**`airflow` service:**
+- `depends_on` — waits for postgres to be healthy before starting
+- `AIRFLOW__CORE__EXECUTOR: LocalExecutor` — uses LocalExecutor instead of SequentialExecutor, which means tasks can run in parallel. More production-like.
+- `SQL_ALCHEMY_CONN` — tells Airflow to use PostgreSQL instead of SQLite
+- `volumes` — mounts all your local folders into the container. Notice both `data` and `spark_jobs` are mounted so Airflow can read and write files that Spark also sees
+
+**`spark` service:**
+- `command: tail -f /dev/null` — keeps the container running without doing anything. Airflow will tell it what to do via `docker exec`
+- Both `data` and `spark_jobs` volumes are also mounted here — this is the **shared volume** that lets Airflow write a file and Spark read it
+
+---
+
+## Step 4 — Start the full stack
+
+```cmd
+cd "E:\Self Development\Apache Air Flow\football-league-pipeline\docker"
+docker-compose up -d
+```
+
+This will start all 3 containers together. Wait about 30 seconds then check they're all running:
+
+```cmd
+docker ps
+```
+
+You should see 3 containers: `football_postgres`, `football_airflow`, `football_spark` all with status `Up`.
+
+---
+

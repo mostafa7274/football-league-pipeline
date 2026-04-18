@@ -1,0 +1,81 @@
+version: '3.8'
+
+networks:
+  football_network:
+    driver: bridge
+
+services:
+
+  # PostgreSQL - Airflow metadata database
+  postgres:
+    image: postgres:15
+    container_name: football_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    networks:
+      - football_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+
+  # Airflow
+  airflow:
+    image: apache/airflow:2.9.1
+    container_name: football_airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - football_network
+    ports:
+      - "8085:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@football_postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__FERNET_KEY: "ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg="
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../logs:/opt/airflow/logs
+      - ../plugins:/opt/airflow/plugins
+      - ../data:/opt/airflow/data
+      - ../spark_jobs:/opt/airflow/spark_jobs
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: standalone
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+
+  # Spark
+  spark:
+    image: apache/spark:3.5.1
+    container_name: football_spark
+    networks:
+      - football_network
+    volumes:
+      - ../data:/opt/spark/data
+      - ../spark_jobs:/opt/spark/spark_jobs
+    command: tail -f /dev/null
+    environment:
+      - SPARK_MODE=master
+
+      # MongoDB - stores final standings
+  mongodb:
+    image: mongo:7.0
+    container_name: football_mongodb
+    networks:
+      - football_network
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  postgres_data:
+  mongo_data:
