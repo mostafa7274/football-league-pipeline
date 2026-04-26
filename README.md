@@ -98,7 +98,7 @@ Results are sorted by points descending, with goal difference as tiebreaker.
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/football-league-pipeline.git
+git clone https://github.com/mostafa7274/football-league-pipeline.git
 cd football-league-pipeline
 ```
 
@@ -112,13 +112,9 @@ Wait about 60 seconds for Airflow to initialize.
 
 ### 3. Access the Airflow UI
 Open http://localhost:8085 in your browser.
-Login with username `admin` and the password from:
-```bash
-docker exec football_airflow airflow users reset-password --username admin --password admin123
-```
 
 ### 4. Trigger the pipeline
-In the Airflow UI, find `football_league_pipeline` and click the **▶ Run** button.
+In the Airflow UI, find `football_league_pipeline` and click the Run button.
 
 ### 5. Verify results in MongoDB
 ```bash
